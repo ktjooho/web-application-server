@@ -10,15 +10,21 @@ import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.rmi.UnexpectedException;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import model.User;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
     private RequestType request_type;
     private Socket connection;
     private byte[] body_buffer;
+    private User user;
+    
     
     private enum RequestType{
     	GET,
@@ -34,15 +40,32 @@ public class RequestHandler extends Thread {
     {
     	
     }
-    private void analyze(String[] tokens)
+    private void analyze(String[] tokens) throws UnexpectedException
     {
     	if(tokens[0].equals("GET"))
     	{
     		request_type = RequestType.GET;
-    		if(tokens[1].endsWith(".html")){
-    			body_buffer = loadResourceFile(tokens[1]);
-    		}
     		
+    		if(tokens.length < 2)
+    			throw new UnexpectedException("Parsing Get Type Error");
+    		
+    		String url = tokens[1];
+    		int index = url.indexOf("?");
+    		String request_path = "dummy";
+    		
+    		if(index < 0)
+    		{
+    			request_path = url;
+    		}
+    		else
+    		{
+    			request_path = url.substring(0, index);
+        		String params = url.substring(index+1);
+        		Map<String,String> m = util.HttpRequestUtils.parseQueryString(params);
+        		user = new User(m.get("userId"), m.get("password"), m.get("name"), 	m.get("email"));
+        		log.debug(user.toString());
+    		}
+    		body_buffer = loadResourceFile(request_path);
     	}
     	
     }
@@ -60,7 +83,6 @@ public class RequestHandler extends Thread {
     	try {
 			while((line=br.readLine())!=null && !"".equals(line))
 			{
-				
 				log.debug("Msg from Client:"+line);
 				String []tokens = line.split(" ");
 				analyze(tokens);
@@ -73,7 +95,7 @@ public class RequestHandler extends Thread {
     }
     private byte[] loadResourceFile(String url)
     {
-    	byte[] data = null;
+    	byte[] data = "Fail to load resource file".getBytes();
     	try {
 			data = Files.readAllBytes(new File("./webapp"+url).toPath());
 			log.debug(data.toString());
