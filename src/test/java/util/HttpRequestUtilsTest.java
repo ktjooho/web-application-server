@@ -22,7 +22,6 @@ public class HttpRequestUtilsTest {
         assertThat(parameters.get("userId"), is("javajigi"));
         assertThat(parameters.get("password"), is("password2"));
     }
-
     @Test
     public void parseQueryString_null() {
         Map<String, String> parameters = HttpRequestUtils.parseQueryString(null);

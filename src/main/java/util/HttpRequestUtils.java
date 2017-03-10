@@ -48,28 +48,22 @@ public class HttpRequestUtils {
 
         return new Pair(tokens[0], tokens[1]);
     }
-
     public static Pair parseHeader(String header) {
         return getKeyValue(header, ": ");
     }
-
     public static class Pair {
         String key;
         String value;
-
         Pair(String key, String value) {
             this.key = key.trim();
             this.value = value.trim();
         }
-
         public String getKey() {
             return key;
         }
-
         public String getValue() {
             return value;
         }
-
         @Override
         public int hashCode() {
             final int prime = 31;
@@ -78,7 +72,6 @@ public class HttpRequestUtils {
             result = prime * result + ((value == null) ? 0 : value.hashCode());
             return result;
         }
-
         @Override
         public boolean equals(Object obj) {
             if (this == obj)
@@ -100,7 +93,6 @@ public class HttpRequestUtils {
                 return false;
             return true;
         }
-
         @Override
         public String toString() {
             return "Pair [key=" + key + ", value=" + value + "]";
