@@ -12,7 +12,10 @@ import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.rmi.UnexpectedException;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.xml.crypto.Data;
 
@@ -68,34 +71,47 @@ public class RequestHandler extends Thread {
     	UPDATE,
     	DELETE,
     	LOGIN,
+		LIST,
     }
     
     public RequestHandler(Socket connectionSocket) 
     {
         this.connection = connectionSocket;
+		request_header_property_map = new HashMap<String,String>();
+		response_header_property_map = new HashMap<String,String>();
+		response_body_buffer = "".getBytes();
+		query_map = new HashMap<String,String>();
     }
     private void process()
     {
     	//Process CRUD Operations.
     	if(operation_type == OperationType.CREATE)
     	{
-    		if(target_resource.equals("user"))
+    		if(target_resource.equals("/user"))
     		{
     			user = new User(query_map.get("userId"), query_map.get("password"), query_map.get("name"), 	query_map.get("email"));
     			DataBase.addUser(user);
     			status_code = StatusCode.STATUS_302;
-    			request_header_property_map.put("Location", "http://localhost:8080/index.html");
-    		}
+				response_header_property_map.put("Location", "http://localhost:8080/index.html");
+    		}else{
+    			log.debug("Fail to make user");
+			}
     		//STATUS_302
     		//
     	}
     	else if(operation_type==OperationType.READ)
     	{
     		response_body_buffer = loadResourceFile(target_resource);
-    		
     		status_code = StatusCode.STATUS_200;
-    		request_header_property_map.put("Content-Type", "text/html;charset=utf-8");
-    		request_header_property_map.put("Content-Length", String.valueOf(response_body_buffer.length));
+			String request_resource_type = request_header_property_map.get("Accept");
+			if(request_resource_type.contains("css"))
+				response_header_property_map.put("Content-Type", "text/css;charset=utf-8");
+
+			else// (request_resource_type.contains("html"))
+				response_header_property_map.put("Content-Type", "text/html;charset=utf-8");
+
+			response_header_property_map.put("Content-Length", String.valueOf(response_body_buffer.length));
+
     	}
     	else if(operation_type == OperationType.UPDATE)
     	{
@@ -107,14 +123,89 @@ public class RequestHandler extends Thread {
     	{
     		String user_id = query_map.get("userId");
     		User user = DataBase.findUserById(user_id);
+			status_code = StatusCode.STATUS_302;
     		String login_cookie = "logined=true";
-    		
+			response_header_property_map.put("Location", "http://localhost:8080/index.html");
+
     		if(user==null ||!user.getPassword().equals(query_map.get("password")) )
     		{
-    			login_cookie ="logined=false"; 
+    			login_cookie ="logined=false";
+				response_header_property_map.put("Location", "http://localhost:8080/user/login_failed.html");
     		}
+    		response_header_property_map.put("Set-Cookie",login_cookie);
     		
     	}
+    	else if(operation_type == OperationType.LIST)
+		{
+			//login_check
+			String login_check = request_header_property_map.get("Cookie");
+
+			if(login_check==null || !login_check.equals("logined=true")){
+				status_code = StatusCode.STATUS_302;
+				response_header_property_map.put("Location", "http://localhost:8080/user/login.html");
+			}
+			else{
+				status_code = StatusCode.STATUS_200;
+				response_header_property_map.put("Content-Type", "text/html;charset=utf-8");
+				StringBuilder stringBuilder = new StringBuilder("");
+				stringBuilder.append("<!DOCTYPE html>\n" +
+						"<html lang=\"kr\">\n" +
+						"<head>\n" +
+						"    <meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">\n" +
+						"    <meta charset=\"utf-8\">\n" +
+						"    <title>SLiPP Java Web Programming</title>\n" +
+						"    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1\">\n" +
+						"    <link href=\"../css/bootstrap.min.css\" rel=\"stylesheet\">\n" +
+						"    <!--[if lt IE 9]>\n" +
+						"    <script src=\"//html5shim.googlecode.com/svn/trunk/html5.js\"></script>\n" +
+						"    <![endif]-->\n" +
+						"    <link href=\"../css/styles.css\" rel=\"stylesheet\">\n" +
+						"</head>\n" +
+						"<body>"+
+						"<div class=\"container\" id=\"main\">\n" +
+								"   <div class=\"col-md-10 col-md-offset-1\">\n" +
+								"      <div class=\"panel panel-default\">\n" +
+								"          <table class=\"table table-hover\">\n" +
+								"              <thead>\n" +
+								"                <tr>\n" +
+								"                    <th>#</th> <th>사용자 아이디</th> <th>이름</th> <th>이메일</th><th></th>\n" +
+								"                </tr>\n" +
+								"              </thead>\n" +
+								"              <tbody>"
+
+						);
+
+				//effectively final int  idx = 1;
+				final AtomicInteger idx = new AtomicInteger(1);
+				DataBase.findAll().forEach(
+						(user)->{
+
+							stringBuilder.append("<tr>\n"+
+									"<th scope=\"row\">"+idx+"</th> " +
+									"<td>"+user.getUserId()+"</td> " +
+									"<td>"+user.getName()+"</td> " +
+									"<td>"+user.getEmail()+"</td>" +
+									"<td><a href=\"#\" class=\"btn btn-success\" role=\"button\">수정</a></td>");
+							idx.getAndAdd(1);
+						}
+				);
+				stringBuilder.append("</tbody>\n" +
+						"          </table>\n" +
+						"        </div>\n" +
+						"    </div>\n" +
+						"</div>\n" +
+						"\n" +
+						"<!-- script references -->\n" +
+						"<script src=\"../js/jquery-2.2.0.min.js\"></script>\n" +
+						"<script src=\"../js/bootstrap.min.js\"></script>\n" +
+						"<script src=\"../js/scripts.js\"></script>\n" +
+						"\t</body>\n" +
+						"</html>");
+				String data = new String(stringBuilder);
+				response_body_buffer = data.getBytes();
+				response_header_property_map.put("Content-Length", String.valueOf(response_body_buffer.length));
+			}
+		}
     }
     private void parseRequestHttpVerb(String token)
     {
@@ -128,14 +219,38 @@ public class RequestHandler extends Thread {
     		request_type = RequestType.DELETE;
     	}
     }
-   
+	private boolean isItStaticResource(String line)
+	{
+		String []post = {
+				".html",".ico",".js",".css",".woff",".ttf"
+		};
+		for(int i=0; i<post.length; ++i)
+		{
+			if(line.contains(post[i]))
+				return true;
+		}
+		return false;
+		/*
+		if(line.contains(".html"))
+			return true;
+		return false;
+		*/
+	}
     private void parseRequestHttpOperation(String token)
     {
+    	if(isItStaticResource(token))
+		{
+			target_resource = token;
+			operation_type = OperationType.READ;
+			return ;
+		}
+
     	String uri = token;
     	String request_resource;
     	String params;
     	
     	int index = uri.indexOf("?");
+    	int param_start = index + 1;
     	boolean has_params = false; 
 
     	if(index < 0){
@@ -145,13 +260,13 @@ public class RequestHandler extends Thread {
     		request_resource = uri.substring(0,index);
     		has_params = true;
     	}
-    	
+
 		index = request_resource.lastIndexOf("/");
 		String operation_name = request_resource.substring(index+1);
 		
 		target_resource = request_resource.substring(0, index);
 		operation_type = OperationType.READ;
-		
+
 		if(operation_name.equals("create"))
 			operation_type = OperationType.CREATE;
 		if(operation_name.equals("read"))
@@ -162,16 +277,19 @@ public class RequestHandler extends Thread {
 			operation_type = OperationType.DELETE;
 		if(operation_name.equals("login"))
 			operation_type = OperationType.LOGIN;
+		if(operation_name.equals("list"))
+			operation_type = OperationType.LIST;
 
 		if(has_params)
 		{
-			params = uri.substring(index+1);
+			params = uri.substring(param_start);
 			query_map = util.HttpRequestUtils.parseQueryString(params);
 		}
     }
     private void parseRequestMethod(String line) throws UnexpectedException
     {
-    	if(line.isEmpty() || line==null){
+    	log.debug("Request Method:"+line);
+    	if( line==null || line.isEmpty() ){
     		throw new UnexpectedException("Not Http Request");
     	}
     	String []tokens = line.split(" ");
@@ -185,6 +303,7 @@ public class RequestHandler extends Thread {
     	String line = null;
     	while((line=br.readLine())!=null && !"".equals(line))
     	{
+			log.debug("Request Header:"+line);
     		Pair pair = HttpRequestUtils.parseHeader(line);
     		request_header_property_map.put(pair.getKey(), pair.getValue());
     	}
@@ -192,7 +311,8 @@ public class RequestHandler extends Thread {
     private void parseRequestBody(BufferedReader br) throws UnexpectedException, IOException
     {
     	if(request_type != RequestType.POST)
-    		throw new UnexpectedException("RequestType is supposed to be POST");
+    		return ;
+//    		throw new UnexpectedException("RequestType is supposed to be POST");
     	
     	final String key = "Content-Length";
     	int content_length = 0;
@@ -202,12 +322,33 @@ public class RequestHandler extends Thread {
     	}
     	else 
     		return ;
-    	
+
+    	log.debug("Content_legnth : "+content_length);
+
+		/*
+		String line = null;
+		while((line=br.readLine())!=null && !"".equals(line))
+		{
+			log.debug("Request_body:"+line);
+			Pair pair = HttpRequestUtils.parseHeader(line);
+			request_header_property_map.put(pair.getKey(), pair.getValue());
+		}
+		*/
+
     	char []cbuf = new char[ content_length+1];
-    	
+    	cbuf[content_length] = '\0';
+		//String s = new String();
+		//br.read(s);
+
+		 br.read(cbuf);
+		/*
     	if(br.read(cbuf)!= -1 )
     		throw new UnexpectedException("Content-Length Doesn't match");
+    	*/
+		String str = new String(cbuf);
+		log.debug("Content : "+ str);
     	query_map = HttpRequestUtils.parseQueryString(new String(cbuf));
+		log.debug("Query_map:"+query_map.toString());
     }
     private void parseRequest(InputStream in)
     {
@@ -241,6 +382,7 @@ public class RequestHandler extends Thread {
     }
     private byte[] loadResourceFile(String url)
     {
+		log.debug("Load_Url:"+url);
     	byte[] data = "Fail to load resource file".getBytes();
     	try {
 			data = Files.readAllBytes(new File("./webapp"+url).toPath());
@@ -259,7 +401,7 @@ public class RequestHandler extends Thread {
         
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
             // TODO 
-        	response_body_buffer = "There is nothing to show for you.".getBytes();
+        	response_body_buffer = "".getBytes();
         	parseRequest(in);
         	process();
             response(out);
@@ -279,10 +421,36 @@ public class RequestHandler extends Thread {
     	
     	
     	DataOutputStream dos = new DataOutputStream(out);
-    	response200Header(dos, response_body_buffer.length);
+    	//response200Header(dos, response_body_buffer.length);
+		responseHeader(dos);
     	responseBody(dos, response_body_buffer);
     }
-    //private void responseHeader()
+    private void responseHeader(DataOutputStream dos)
+	{
+		String status="";
+		String line_feed = "\r\n";
+		String delimeter = ": ";
+		String header = "";
+		if(status_code==StatusCode.STATUS_200){
+			status = "200 OK";
+		}else if(status_code==StatusCode.STATUS_302){
+			status = "302 Found";
+		}
+
+		header = header +"HTTP/1.1 " + status + line_feed;
+
+		//Iterator<HashMap<String,String>> it = response_header_property_map.;
+		for(Map.Entry<String,String> entry : response_header_property_map.entrySet()){
+			header = header + entry.getKey()+delimeter+entry.getValue()+line_feed;
+		}
+		header = header + line_feed;
+		log.debug("Response Header :"+header);
+		try {
+			dos.writeBytes(header);
+		} catch (IOException e) {
+			log.error(e.getMessage());
+		}
+	}
     //private void responseHeaderStatusCode
     //private void responseHeaderProperties
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
@@ -297,8 +465,9 @@ public class RequestHandler extends Thread {
     }
 
     private void responseBody(DataOutputStream dos, byte[] body) {
-        try {
-            dos.write(body, 0, body.length);
+    	try {
+    		if(body.length > 0)
+            	dos.write(body, 0, body.length);
             dos.flush();
         } catch (IOException e) {
             log.error(e.getMessage());

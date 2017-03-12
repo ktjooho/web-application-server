@@ -40,6 +40,14 @@ public class RequestHandlerTest {
 		//request_handler = new RequestHandler(null);
 	}
 	@Test
+	public void testContain()
+	{
+		String regex = ".css|.html|.ico|.jpg";
+		String str = "x.css";
+//		str.contain
+		assertEquals(true,str.contains(regex) );
+	}
+	@Test
 	public void testHH()
 	{
 		String str = "Host: Juho";
