@@ -1,12 +1,16 @@
 package webserver;
 
+import http.HttpCookie;
 import http.HttpRequest;
 import http.HttpResponse;
+import http.HttpSession;
+import http.HttpSessions;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,17 +23,26 @@ public class RequestHandler extends Thread {
     private Socket connection;
 
     public RequestHandler(Socket connectionSocket) {
-        this.connection = connectionSocket;
+        
+    	this.connection = connectionSocket;
     }
 
     public void run() {
-        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(),
+     
+    	log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(),
                 connection.getPort());
 
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
             HttpRequest request = new HttpRequest(in);
             HttpResponse response = new HttpResponse(out);
-
+            
+            HttpCookie cookie = request.getCookies();
+            String sessionId = cookie.getCookie(HttpSessions.SESSION_ID_NAME);
+            
+            if(sessionId == null) {
+            	response.addHeader("Set-Cookie", HttpSessions.SESSION_ID_NAME + "=" + UUID.randomUUID());
+            }
+            
             Controller controller = RequestMapping.getController(request.getPath());
             if (controller == null) {
                 String path = getDefaultPath(request.getPath());

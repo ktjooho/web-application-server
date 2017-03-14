@@ -21,7 +21,7 @@ public class HttpRequest {
     private Map<String, String> params;
 
     private RequestLine requestLine;
-
+    
     public HttpRequest(InputStream is) {
         try {
             BufferedReader br = new BufferedReader(new InputStreamReader(is, "UTF-8"));
@@ -53,6 +53,10 @@ public class HttpRequest {
             log.error(io.getMessage());
         }
     }
+    
+    public HttpCookie getCookies() {
+    	return new HttpCookie(getHeader("Cookie"));
+    }
 
     public HttpMethod getMethod() {
         return requestLine.getMethod();
@@ -69,4 +73,14 @@ public class HttpRequest {
     public String getParameter(String name) {
         return params.get(name);
     }
+    
+    private String getSessionId(String cookieValue) {
+    	Map<String,	String> cookies = HttpRequestUtils.parseCookies(cookieValue);
+    	return cookies.get("JSESSIONID");
+    }
+    
+    public HttpSession getSession() {
+    	return HttpSessions.getSession(getCookies().getCookie("JSESSIONID"));
+    }
+    
 }
